@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <!-- تعديل الـ viewport لمنع التكبير التلقائي عند الكتابة في الموبايل -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>نظام التقييم - محافظة المنوفية</title>
+    
+    <!-- استدعاء خط "تجوال" العربي ليكون التصميم فخماً -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- استدعاء Tailwind CSS للتصميم -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Tajawal', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- استدعاء Babel لتحويل كود React ليفهمه المتصفح -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- إعداد مكتبات React والأيقونات لتعمل من الروابط مباشرة -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+        }
+    }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent; /* إزالة المربع الأزرق عند الضغط في الموبايل */
+        }
+        @keyframes progress {
+            0% { background-position: 1rem 0; }
+            100% { background-position: 0 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- المكان الذي سيظهر فيه الموقع -->
+    <div id="root"></div>
+
+    <!-- كود البرمجة الخاص بالموقع -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Search, Users, Star, Percent, Award, Trophy, AlertCircle, Loader2, Calendar, MapPin, CheckCircle, Clock, Sparkles, Crown, Quote, Share2, RefreshCw } from 'lucide-react';
+
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQt-zttK0q8J1Ko4gy0tNz6r1MvTmPQ7-0Ywl4oSVMJYSIWD8MBeOU3GXnXUeNclxuKNOQEOIDNcmzT/pub?gid=712928200&single=true&output=csv";
+
+        const normalizeArabicText = (text) => {
+          if (!text) return "";
+          return text
+            .replace(/[أإآ]/g, "ا")
+            .replace(/ة/g, "ه")
+            .replace(/ى/g, "ي")
+            .toLowerCase()
+            .trim();
+        };
+
+        const getMotivationalQuote = (appreciation, isChampion) => {
+          if (isChampion) return "أنت فخر حقيقي لمحافظة المنوفية! استمر في إلهام من حولك بتميزك وإبداعك اللامحدود، مكانك دائماً في القمة. 🌟";
+          
+          const appLevel = (appreciation || "").toLowerCase();
+          
+          if (appLevel.includes("ممتاز") || appLevel.includes("امتياز")) {
+            return "مجهود استثنائي وأداء مبهر! خطواتك تقودك نحو الصدارة بخطى ثابتة، ننتظر منك المزيد من الإبداع. 🚀";
+          } else if (appLevel.includes("جيد جدا")) {
+            return "عمل رائع ومجهود مقدر جداً! أنت على بعد خطوات قليلة من المركز الأول، واصل العمل بشغف. 💪";
+          } else if (appLevel.includes("جيد")) {
+            return "أداء طيب ومجهود محترم! نثق تماماً في قدراتك ونتوقع منك الأفضل في التقييم القادم، لا تتوقف. 📈";
+          } else {
+            return "سعداء بجهدك وتواجدك المؤثر معنا.. كل خطوة هي بداية لنجاح أكبر، معاً نصنع الفارق! ✨";
+          }
+        };
+
+        const parseCSV = (csvText) => {
+          const lines = csvText.split('\n').filter(line => line.trim() !== '');
+          if (lines.length === 0) return [];
+          
+          const headers = lines[0].split(',').map(header => header.trim().replace(/\r/g, ''));
+          const data = [];
+
+          for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            const obj = {};
+            headers.forEach((header, index) => {
+              let value = values[index] || '';
+              value = value.trim().replace(/\r/g, ''); 
+              if (value.startsWith('"') && value.endsWith('"')) {
+                value = value.substring(1, value.length - 1);
+              }
+              obj[header] = value;
+            });
+            data.push(obj);
+          }
+          return data;
+        };
+
+        function App() {
+          const [searchTerm, setSearchTerm] = useState("");
+          const [result, setResult] = useState(null);
+          const [hasSearched, setHasSearched] = useState(false);
+          const [sheetData, setSheetData] = useState([]);
+          const [isLoading, setIsLoading] = useState(true);
+          const [error, setError] = useState(null);
+          const [copied, setCopied] = useState(false);
+          
+          const [currentTime, setCurrentTime] = useState(new Date());
+
+          const currentMonth = currentTime.toLocaleDateString('ar-EG', { month: 'long' });
+          const currentYear = currentTime.getFullYear();
+          
+          const formattedDate = currentTime.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          const formattedTime = currentTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+          useEffect(() => {
+            const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+
+            const fetchData = async () => {
+              try {
+                setIsLoading(true);
+                const response = await fetch(GOOGLE_SHEET_CSV_URL);
+                
+                if (!response.ok) {
+                  throw new Error("حدث خطأ أثناء جلب البيانات من جوجل شيت");
+                }
+                
+                const csvText = await response.text();
+                const parsedData = parseCSV(csvText);
+                setSheetData(parsedData);
+                setIsLoading(false);
+              } catch (err) {
+                console.error("Fetch Error:", err);
+                setError("تعذر الاتصال بقاعدة البيانات. تأكد من أن الشيت منشور على الويب بشكل صحيح.");
+                setIsLoading(false);
+              }
+            };
+
+            fetchData();
+            return () => clearInterval(timer);
+          }, []);
+
+          const handleSearch = (e) => {
+            e.preventDefault();
+            if (!searchTerm.trim()) return;
+
+            const normalizedSearch = normalizeArabicText(searchTerm);
+            
+            const foundMember = sheetData.find((member) => {
+              const memberName = member["NAME"] || member["Name"] || member["الاسم"] || "";
+              return normalizeArabicText(memberName).includes(normalizedSearch) || normalizeArabicText(memberName) === normalizedSearch;
+            });
+
+            setResult(foundMember || null);
+            setHasSearched(true);
+            setCopied(false);
+          };
+
+          const handleKeyPress = (e) => {
+            if (e.key === 'Enter') {
+              handleSearch(e);
+            }
+          };
+
+          const resetSearch = () => {
+            setHasSearched(false);
+            setSearchTerm("");
+            setResult(null);
+          };
+
+          const handleShare = async () => {
+            if (!result) return;
+            
+            const shareText = `فخور بحصولي على المركز ${result["Rank"] || "-"} بتقدير "${result["Appreciation"] || "-"}" في التقييم الشهري لاتحاد طلاب تحيا مصر - محافظة المنوفية! 🦅🔥\nنسبتي: ${result["%"] || "-"}\nاللجنة: ${result["Committee"] || "-"}`;
+            
+            if (navigator.share) {
+              try {
+                await navigator.share({
+                  title: 'تقييمي في اتحاد طلاب تحيا مصر',
+                  text: shareText,
+                });
+              } catch (err) {
+                console.log('Share cancelled', err);
+              }
+            } else {
+              try {
+                document.execCommand('copy');
+                navigator.clipboard.writeText(shareText);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 3000);
+              } catch (err) {
+                console.error('Failed to copy text: ', err);
+              }
+            }
+          };
+
+          if (isLoading) {
+            return (
+              <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center relative overflow-hidden px-4" dir="rtl">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-[#0f172a] to-[#0f172a]"></div>
+                <div className="relative z-10 flex flex-col items-center space-y-4">
+                  <div className="text-center">
+                    <h2 className="text-lg sm:text-xl text-slate-400 font-bold mb-1 tracking-wider">اتحاد طلاب تحيا مصر</h2>
+                    <h1 className="text-4xl sm:text-5xl text-white font-black">
+                      محافظة <span className="text-red-600">المنوفية</span>
+                    </h1>
+                  </div>
+                  <div className="flex items-center gap-3 text-red-500 mt-8 bg-white/5 px-6 py-3 sm:px-8 sm:py-4 rounded-full border border-white/10 backdrop-blur-md shadow-2xl">
+                    <Loader2 className="w-6 h-6 sm:w-7 sm:h-7 animate-spin" />
+                    <span className="text-lg sm:text-xl font-bold text-slate-200">جاري تهيئة النظام...</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (error) {
+            return (
+              <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4" dir="rtl">
+                <div className="bg-white border-t-4 border-red-600 p-6 sm:p-8 rounded-3xl max-w-lg text-center shadow-2xl w-full">
+                  <AlertCircle className="w-16 h-16 sm:w-20 sm:h-20 text-red-500 mx-auto mb-4 sm:mb-6" />
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-3">عذراً، حدث خطأ في النظام</h2>
+                  <p className="text-slate-600 leading-relaxed text-base sm:text-lg font-medium">{error}</p>
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    className="mt-6 sm:mt-8 px-6 sm:px-8 py-3 sm:py-4 bg-red-600 text-white font-bold rounded-2xl hover:bg-red-700 transition duration-300 shadow-lg hover:shadow-red-500/30 w-full text-base sm:text-lg"
+                  >
+                    إعادة المحاولة وتحديث البيانات
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          const isChampion = result && (parseInt(result["Rank"]) === 1 || parseInt(result["Total"]) > 70 || parseInt(result["%"]) > 100);
+
+          return (
+            <div className="min-h-screen bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-100 via-white to-slate-100 py-8 sm:py-12 px-3 sm:px-6 lg:px-8 transition-all duration-500 relative overflow-hidden" dir="rtl">
+              
+              <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-red-50/50 to-transparent pointer-events-none"></div>
+              <div className="absolute top-[-10%] right-[-5%] w-72 h-72 sm:w-96 sm:h-96 bg-red-200/20 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute top-[20%] left-[-5%] w-72 h-72 sm:w-96 sm:h-96 bg-slate-200/40 rounded-full blur-3xl pointer-events-none"></div>
+
+              <div className="max-w-3xl mx-auto space-y-8 sm:space-y-10 relative z-10">
+                
+                {/* قسم العناوين (متجاوب مع الموبايل) */}
+                <div className="text-center space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-top-8 duration-1000">
+                  <div className="space-y-2 sm:space-y-3">
+                    <h2 className="text-lg sm:text-2xl font-bold text-slate-500 tracking-wide uppercase">
+                      اتحاد طلاب تحيا مصر
+                    </h2>
+                    <h1 className="text-4xl sm:text-6xl md:text-7xl font-black text-slate-900 drop-shadow-sm tracking-tight leading-tight">
+                      محافظة <span className="text-transparent bg-clip-text bg-gradient-to-l from-red-600 to-red-800">المنوفية</span>
+                    </h1>
+                    <div className="inline-flex items-center justify-center gap-1.5 sm:gap-2 text-slate-600 font-bold text-sm sm:text-lg bg-slate-100/80 px-4 sm:px-6 py-2 sm:py-2.5 rounded-full border border-slate-200 backdrop-blur-sm mt-2 shadow-sm">
+                      <Star className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 fill-red-600/20" />
+                      <span>نظام التقييم الشامل للأعضاء</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-2 sm:pt-4">
+                    <div className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-900/20 border border-slate-700 hover:scale-105 transition-transform w-full sm:w-auto justify-center">
+                      <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+                      <span className="font-bold tracking-wide text-sm sm:text-base">
+                        التقييم لشهر {currentMonth} {currentYear}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-700 bg-white px-4 sm:px-5 py-2 sm:py-3 rounded-xl shadow-lg shadow-slate-200/50 border border-slate-100 w-full sm:w-auto justify-center">
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-slate-900" />
+                      <span dir="rtl">{formattedDate} - {formattedTime}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* مربع البحث (مخصص للموبايل) */}
+                <div className="bg-white/90 backdrop-blur-xl p-2.5 sm:p-4 rounded-[1.5rem] sm:rounded-[2rem] shadow-xl sm:shadow-2xl shadow-slate-200/60 border border-white relative z-20 group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-slate-900 rounded-[1.5rem] sm:rounded-[2rem] opacity-0 group-hover:opacity-10 blur transition-opacity duration-500 -z-10"></div>
+                  <form onSubmit={handleSearch} className="relative flex items-center">
+                    <div className="absolute right-4 sm:right-5 text-slate-400">
+                      <Search className="w-5 h-5 sm:w-7 sm:h-7" />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      placeholder="اكتب اسمك ثنائي..."
+                      className="w-full pr-11 sm:pr-16 pl-24 sm:pl-36 py-3.5 sm:py-5 bg-transparent border-none rounded-xl sm:rounded-2xl focus:outline-none focus:ring-0 text-slate-900 text-base sm:text-xl font-bold placeholder:text-slate-400 placeholder:font-medium"
+                    />
+                    <button
+                      type="submit"
+                      className="absolute left-1.5 sm:left-3 px-4 sm:px-8 py-2 sm:py-3.5 bg-slate-900 hover:bg-red-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-0.5 flex items-center gap-1.5 sm:gap-2"
+                    >
+                      استعلام
+                    </button>
+                  </form>
+                  <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2 pb-1 sm:pb-2 text-[10px] sm:text-xs font-bold text-slate-400 text-center flex-wrap">
+                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
+                    <span>متصل ومحدث تلقائياً بقاعدة بيانات اللجان</span>
+                  </div>
+                </div>
+
+                {hasSearched && (
+                  <div className="animate-in zoom-in-95 fade-in duration-500 ease-out space-y-4 sm:space-y-6">
+                    {result ? (
+                      <>
+                        <div className={`bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-xl sm:shadow-2xl overflow-hidden relative border group/card ${isChampion ? 'shadow-amber-500/30 border-amber-200' : 'shadow-slate-300/50 border-slate-100/50'}`}>
+                          
+                          <div className={`p-6 sm:p-10 relative overflow-hidden border-b-4 ${isChampion ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 border-yellow-200' : 'bg-slate-900 border-red-600'}`}>
+                            <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30"></div>
+                            <div className={`absolute top-[-50%] left-[-10%] w-64 h-64 sm:w-96 sm:h-96 rounded-full blur-3xl ${isChampion ? 'bg-white/40' : 'bg-red-600/20'}`}></div>
+                            
+                            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6 text-center sm:text-right">
+                              
+                              <div className="flex-1 w-full">
+                                {isChampion && (
+                                  <div className="flex justify-center sm:justify-start mb-3 sm:mb-4">
+                                    <div className="animate-bounce">
+                                      <Crown className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-100 fill-yellow-200 drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
+                                    </div>
+                                  </div>
+                                )}
+                                <h2 className={`text-2xl sm:text-4xl md:text-5xl font-black text-white drop-shadow-xl tracking-tight leading-tight`}>
+                                  {result["NAME"] || result["Name"] || "الاسم غير متوفر"}
+                                </h2>
+                                {isChampion && (
+                                  <div className="flex justify-center sm:justify-start">
+                                    <p className="inline-flex items-center gap-1.5 sm:gap-2 mt-4 px-4 py-2 sm:px-5 sm:py-2.5 bg-white/20 backdrop-blur-md rounded-full text-white font-bold text-xs sm:text-sm border border-white/40 shadow-xl">
+                                      <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-200" />
+                                      أداء استثنائي يفوق التوقعات
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className={`w-full sm:w-auto p-[2px] rounded-xl sm:rounded-2xl shadow-xl shrink-0 transform hover:scale-105 transition-transform duration-300 ${isChampion ? 'bg-gradient-to-br from-white via-yellow-100 to-white shadow-yellow-900/20' : 'bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 shadow-amber-500/20'}`}>
+                                <div className={`backdrop-blur-sm px-4 py-3 sm:px-6 sm:py-4 rounded-xl sm:rounded-2xl text-center h-full flex flex-col justify-center border ${isChampion ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-yellow-300' : 'bg-slate-900/90 border-amber-500/30'}`}>
+                                  <p className={`text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 tracking-widest uppercase ${isChampion ? 'text-yellow-100' : 'text-amber-200'}`}>
+                                    الترتيب على مستوى اللجنة
+                                 </p>
+                                  <p className={`text-2xl sm:text-3xl font-black flex items-center justify-center gap-1.5 sm:gap-2 drop-shadow-sm ${isChampion ? 'text-white' : 'text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-500'}`}>
+                                    <Trophy className={`w-6 h-6 sm:w-8 sm:h-8 ${isChampion ? 'text-yellow-200 fill-yellow-200/40' : 'text-amber-400 fill-amber-400/20'}`} /> 
+                                    المركز {result["Rank"] || "-"}
+                                  </p>
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+                          
+                          <div className="p-5 sm:p-10 bg-white">
+                            
+                            <div className="mb-8 sm:mb-10 relative">
+                              <div className="flex justify-between items-end mb-3 sm:mb-4">
+                                <div>
+                                  <p className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2">
+                                    <Sparkles className={`w-3 h-3 sm:w-4 sm:h-4 ${isChampion ? 'text-amber-500' : 'text-red-500'}`} />
+                                    مؤشر الأداء العام
+                                  </p>
+                                  <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5 sm:mt-1">{result["Appreciation"] || "-"}</p>
+                                </div>
+                                <div className={`text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-l ${isChampion ? 'from-amber-500 to-yellow-600' : 'from-red-600 to-slate-900'}`}>
+                                  {result["%"] || "-"}
+                                </div>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-3 sm:h-5 overflow-hidden shadow-inner border border-slate-200/60 p-0.5 sm:p-1 relative">
+                                <div 
+                                  className={`h-full rounded-full relative overflow-hidden transition-all duration-1500 ease-out ${isChampion ? 'bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-400' : 'bg-gradient-to-r from-slate-800 via-red-600 to-red-500'}`} 
+                                  style={{ width: `${Math.min(parseInt(result["%"] || 0), 100)}%` }}
+                                >
+                                   <div className="absolute top-0 right-0 bottom-0 left-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[progress_1s_linear_infinite]"></div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className={`mb-8 sm:mb-10 p-4 sm:p-6 rounded-xl sm:rounded-2xl border relative overflow-hidden ${isChampion ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                              <Quote className={`absolute top-2 right-2 sm:top-4 sm:right-4 w-8 h-8 sm:w-12 sm:h-12 opacity-10 ${isChampion ? 'text-amber-600' : 'text-slate-400'}`} />
+                              <p className={`relative z-10 text-sm sm:text-lg font-bold leading-relaxed text-center ${isChampion ? 'text-amber-800' : 'text-slate-700'}`}>
+                                {getMotivationalQuote(result["Appreciation"], isChampion)}
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
+                              
+                              <div className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-50 border border-slate-100 p-4 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300">
+                                <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-blue-100 rounded-bl-full -z-10 opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                                <div className="flex items-center gap-3 sm:gap-5">
+                                  <div className="p-3 sm:p-4 bg-white shadow-sm text-blue-600 rounded-xl sm:rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                                    <Users className="w-5 h-5 sm:w-7 sm:h-7" />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">اللجنة (Committee)</p>
+                                    <p className="text-lg sm:text-xl font-bold text-slate-900">{result["Committee"] || "-"}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-50 border border-slate-100 p-4 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300">
+                                <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-red-100 rounded-bl-full -z-10 opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                                <div className="flex items-center gap-3 sm:gap-5">
+                                  <div className="p-3 sm:p-4 bg-white shadow-sm text-red-600 rounded-xl sm:rounded-2xl group-hover:bg-red-600 group-hover:text-white transition-colors duration-300">
+                                    <Star className="w-5 h-5 sm:w-7 sm:h-7" />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">المجموع الكلي (Total)</p>
+                                    <p className="text-xl sm:text-2xl font-black text-slate-900">
+                                      {result["Total"] || "-"} <span className="text-xs sm:text-sm font-bold text-slate-400">نقطة</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-50 border border-slate-100 p-4 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300">
+                                <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-emerald-100 rounded-bl-full -z-10 opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                                <div className="flex items-center gap-3 sm:gap-5">
+                                  <div className="p-3 sm:p-4 bg-white shadow-sm text-emerald-600 rounded-xl sm:rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+                                    <Award className="w-5 h-5 sm:w-7 sm:h-7" />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">التقدير (Appreciation)</p>
+                                    <p className="text-lg sm:text-xl font-bold text-slate-900">{result["Appreciation"] || "-"}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-50 border border-slate-100 p-4 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300">
+                                <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-slate-200 rounded-bl-full -z-10 opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                                <div className="flex items-center gap-3 sm:gap-5">
+                                  <div className="p-3 sm:p-4 bg-white shadow-sm text-slate-700 rounded-xl sm:rounded-2xl group-hover:bg-slate-800 group-hover:text-white transition-colors duration-300">
+                                    <Percent className="w-5 h-5 sm:w-7 sm:h-7" />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">النسبة المئوية</p>
+                                    <p className="text-lg sm:text-xl font-bold text-slate-900">{result["%"] || "-"}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 animate-in slide-in-from-bottom-4 duration-700 delay-300">
+                          <button
+                            onClick={handleShare}
+                            className="w-full sm:flex-1 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50 px-4 sm:px-6 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all flex items-center justify-center gap-2 sm:gap-3 shadow-sm hover:shadow-md"
+                          >
+                            <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                            {copied ? "تم النسخ للحافظة! ✅" : "مشاركة الإنجاز"}
+                          </button>
+                          
+                          <button
+                            onClick={resetSearch}
+                            className="w-full sm:flex-1 bg-slate-900 hover:bg-red-600 text-white px-4 sm:px-6 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all flex items-center justify-center gap-2 sm:gap-3 shadow-md hover:shadow-xl"
+                          >
+                            <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6" />
+                            استعلام عن اسم آخر
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] p-8 sm:p-12 text-center shadow-xl sm:shadow-2xl border border-slate-100">
+                        <div className="relative inline-flex mb-6 sm:mb-8">
+                          <div className="absolute inset-0 bg-red-100 rounded-full scale-150 animate-ping opacity-50"></div>
+                          <div className="relative flex justify-center items-center w-20 h-20 sm:w-24 sm:h-24 bg-red-50 border-4 border-red-100 rounded-full text-red-500">
+                            <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12" />
+                          </div>
+                        </div>
+                        <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mb-3 sm:mb-4">لم نتمكن من العثور على اسمك</h3>
+                        <p className="text-slate-500 text-base sm:text-lg font-medium max-w-md mx-auto leading-relaxed">
+                          يرجى التأكد من كتابة الاسم ثنائي بشكل صحيح كما هو مسجل في كشوف اللجان لتتمكن من عرض نتيجتك.
+                        </p>
+                        <button
+                          onClick={resetSearch}
+                          className="mt-6 sm:mt-8 bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-bold transition-colors w-full sm:w-auto"
+                        >
+                          حاول مرة أخرى
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
