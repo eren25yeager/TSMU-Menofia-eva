@@ -55,7 +55,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Search, Users, Star, Percent, Award, Trophy, AlertCircle, Loader2, Calendar, MapPin, CheckCircle, Clock, Sparkles, Crown, Quote, RefreshCw, ClipboardList, Target, Briefcase, Zap, MessageCircle, BookOpen, PlusCircle } from 'lucide-react';
+        import { Search, Users, Star, Percent, Award, Trophy, AlertCircle, Loader2, Calendar, MapPin, CheckCircle, Clock, Sparkles, Crown, RefreshCw, ClipboardList, Target, Briefcase, Zap, MessageCircle, BookOpen, PlusCircle } from 'lucide-react';
 
         const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQt-zttK0q8J1Ko4gy0tNz6r1MvTmPQ7-0Ywl4oSVMJYSIWD8MBeOU3GXnXUeNclxuKNOQEOIDNcmzT/pub?gid=712928200&single=true&output=csv";
 
@@ -67,22 +67,6 @@
             .replace(/ى/g, "ي")
             .toLowerCase()
             .trim();
-        };
-
-        const getMotivationalQuote = (appreciation, isChampion) => {
-          if (isChampion) return "أنت فخر حقيقي لمحافظة المنوفية! استمر في إلهام من حولك بتميزك وإبداعك اللامحدود، مكانك دائماً في القمة. 🌟";
-          
-          const appLevel = (appreciation || "").toLowerCase();
-          
-          if (appLevel.includes("ممتاز") || appLevel.includes("امتياز")) {
-            return "مجهود استثنائي وأداء مبهر! خطواتك تقودك نحو الصدارة بخطى ثابتة، ننتظر منك المزيد من الإبداع. 🚀";
-          } else if (appLevel.includes("جيد جدا")) {
-            return "عمل رائع ومجهود مقدر جداً! أنت على بعد خطوات قليلة من المركز الأول، واصل العمل بشغف. 💪";
-          } else if (appLevel.includes("جيد")) {
-            return "أداء طيب ومجهود محترم! نثق تماماً في قدراتك ونتوقع منك الأفضل في التقييم القادم، لا تتوقف. 📈";
-          } else {
-            return "سعداء بجهدك وتواجدك المؤثر معنا.. كل خطوة هي بداية لنجاح أكبر، معاً نصنع الفارق! ✨";
-          }
         };
 
         const parseCSV = (csvText) => {
@@ -155,11 +139,15 @@
             e.preventDefault();
             if (!searchTerm.trim()) return;
 
-            const normalizedSearch = normalizeArabicText(searchTerm);
+            const safeSearchTerm = searchTerm.trim();
             
             const foundMember = sheetData.find((member) => {
-              const memberName = member["NAME"] || member["Name"] || member["الاسم"] || "";
-              return normalizeArabicText(memberName).includes(normalizedSearch) || normalizeArabicText(memberName) === normalizedSearch;
+              // نبحث في عمود id (الرقم القومي) 
+              const memberId = member["id"] || member["ID"] || member["Id"] || member["الرقم القومي"] || "";
+              const safeMemberId = String(memberId).trim();
+              
+              // التأكد من أن المستخدم أدخل 4 أرقام، وأن الرقم القومي ينتهي بها
+              return safeSearchTerm.length === 4 && safeMemberId.endsWith(safeSearchTerm);
             });
 
             setResult(foundMember || null);
@@ -266,11 +254,16 @@
                     </div>
                     <input
                       type="text"
+                      inputMode="numeric"
+                      maxLength="4"
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, ''); // السماح بالأرقام فقط
+                        if (val.length <= 4) setSearchTerm(val);
+                      }}
                       onKeyDown={handleKeyPress}
-                      placeholder="اكتب اسمك ثنائي..."
-                      className="w-full pr-11 sm:pr-16 pl-24 sm:pl-36 py-3.5 sm:py-5 bg-transparent border-none rounded-xl sm:rounded-2xl focus:outline-none focus:ring-0 text-slate-900 text-base sm:text-xl font-bold placeholder:text-slate-400 placeholder:font-medium"
+                      placeholder="أدخل آخر 4 أرقام من الرقم القومي..."
+                      className="w-full pr-11 sm:pr-16 pl-24 sm:pl-36 py-3.5 sm:py-5 bg-transparent border-none rounded-xl sm:rounded-2xl focus:outline-none focus:ring-0 text-slate-900 text-base sm:text-xl font-bold placeholder:text-slate-400 placeholder:font-medium tracking-widest"
                     />
                     <button
                       type="submit"
@@ -319,7 +312,7 @@
                                   )}
                                 </div>
                                 
-                                <div className={`w-full sm:w-auto p-[2px] rounded-xl sm:rounded-2xl shadow-xl shrink-0 ${isChampion ? 'bg-gradient-to-br from-white via-yellow-100 to-white shadow-yellow-900/20' : 'bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 shadow-amber-500/20'}`}>
+                                <div className={`w-full sm:w-auto p-[2px] rounded-xl sm:rounded-2xl shadow-xl shrink-0 transform hover:scale-105 transition-transform duration-300 ${isChampion ? 'bg-gradient-to-br from-white via-yellow-100 to-white shadow-yellow-900/20' : 'bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 shadow-amber-500/20'}`}>
                                   <div className={`backdrop-blur-sm px-4 py-3 sm:px-6 sm:py-4 rounded-xl sm:rounded-2xl text-center h-full flex flex-col justify-center border ${isChampion ? 'bg-gradient-to-br from-amber-600 to-yellow-600 border-yellow-300' : 'bg-slate-900/90 border-amber-500/30'}`}>
                                     <p className={`text-[10px] sm:text-xs font-bold mb-1 sm:mb-2 tracking-widest uppercase ${isChampion ? 'text-yellow-100' : 'text-amber-200'}`}>
                                       الترتيب على مستوى اللجنة
@@ -357,13 +350,6 @@
                                      <div className="absolute top-0 right-0 bottom-0 left-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[progress_1s_linear_infinite]"></div>
                                   </div>
                                 </div>
-                              </div>
-
-                              <div className={`mb-8 sm:mb-10 p-4 sm:p-6 rounded-xl sm:rounded-2xl border relative overflow-hidden ${isChampion ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
-                                <Quote className={`absolute top-2 right-2 sm:top-4 sm:right-4 w-8 h-8 sm:w-12 sm:h-12 opacity-10 ${isChampion ? 'text-amber-600' : 'text-slate-400'}`} />
-                                <p className={`relative z-10 text-sm sm:text-lg font-bold leading-relaxed text-center ${isChampion ? 'text-amber-800' : 'text-slate-700'}`}>
-                                  {getMotivationalQuote(result["Appreciation"], isChampion)}
-                                </p>
                               </div>
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
@@ -465,7 +451,7 @@
                             className="w-full sm:w-auto px-6 sm:px-12 py-3.5 sm:py-4 bg-slate-900 hover:bg-red-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg transition-all flex items-center justify-center gap-2 sm:gap-3 shadow-md hover:shadow-xl"
                           >
                             <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6" />
-                            استعلام عن اسم آخر
+                            استعلام جديد
                           </button>
                         </div>
                       </>
@@ -477,9 +463,9 @@
                             <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12" />
                           </div>
                         </div>
-                        <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mb-3 sm:mb-4">لم نتمكن من العثور على اسمك</h3>
+                        <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mb-3 sm:mb-4">لم نتمكن من العثور على بياناتك</h3>
                         <p className="text-slate-500 text-base sm:text-lg font-medium max-w-md mx-auto leading-relaxed">
-                          يرجى التأكد من كتابة الاسم ثنائي بشكل صحيح كما هو مسجل في كشوف اللجان لتتمكن من عرض نتيجتك.
+                          يرجى التأكد من إدخال <strong>آخر 4 أرقام</strong> من الرقم القومي بشكل صحيح ومطابق لما هو مسجل في كشوف اللجان.
                         </p>
                         <button
                           onClick={resetSearch}
